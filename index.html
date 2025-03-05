@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procesamiento de Imágenes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f4f4f4;
+            overflow-y: auto;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 50%;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .step {
+            background: #e0e0e0;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        img,
+        video,
+        canvas {
+            max-width: 100%;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: block;
+            width: 100%;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="step">
+            <h2>Paso 1. Sube una imagen</h2>
+            <input type="file" id="upload" accept="image/*">
+        </div>
+        <div class="step">
+            <h2>Paso 2. Imagen cargada</h2>
+            <img id="uploadedImage" class="hidden">
+            <button id="sendEndpoint1" class="hidden">Enviar endpoint 1</button>
+        </div>
+        <div class="step">
+            <h2>Paso 3. Imagen obtenida de respuesta</h2>
+            <img id="responseImage" class="hidden">
+            <button id="activateCamera" class="hidden">Activar cámara</button>
+        </div>
+        <div class="step">
+            <h2>Paso 4. Captura de imagen</h2>
+            <video id="camera" class="hidden" autoplay></video>
+            <button id="capturePhoto" class="hidden">Capturar foto</button>
+        </div>
+        <div class="step">
+            <h2>Paso 5. Captura realizada</h2>
+            <canvas id="capturedCanvas" class="hidden"></canvas>
+            <button id="sendEndpoint2" class="hidden">Enviar endpoint 2</button>
+        </div>
+        <div class="step">
+            <h2>Paso 6. Resultado del match</h2>
+            <p id="matchResult" class="hidden"></p>
+            <button id="resetButton" class="hidden">Limpiar</button>
+        </div>
+    </div>
+
+    <script>
+        let uploadedBase64 = "";
+        let capturedBase64 = "";
+
+        document.getElementById('upload').addEventListener('change', function (event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    uploadedBase64 = e.target.result.split(',')[1];
+                    document.getElementById('uploadedImage').src = e.target.result;
+                    document.getElementById('uploadedImage').classList.remove('hidden');
+                    document.getElementById('sendEndpoint1').classList.remove('hidden');
+                    resetSteps();
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        function resetSteps() {
+            document.getElementById('responseImage').classList.add('hidden');
+            document.getElementById('activateCamera').classList.add('hidden');
+            document.getElementById('camera').classList.add('hidden');
+            document.getElementById('capturePhoto').classList.add('hidden');
+            document.getElementById('capturedCanvas').classList.add('hidden');
+            document.getElementById('sendEndpoint2').classList.add('hidden');
+            document.getElementById('matchResult').classList.add('hidden');
+        }
+
+        document.getElementById('sendEndpoint1').addEventListener('click', async function () {
+            const response = await fetch('https://metaid.vinkel.co/ocr/ocr_server/logic/extracFace', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: uploadedBase64 })
+            });
+            const data = await response.json();
+            if (data.data.length > 0) {
+                document.getElementById('responseImage').src = `data:image/png;base64,${data.data[0]}`;
+                document.getElementById('responseImage').classList.remove('hidden');
+                document.getElementById('activateCamera').classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('activateCamera').addEventListener('click', function () {
+            navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+                document.getElementById('camera').srcObject = stream;
+                document.getElementById('camera').classList.remove('hidden');
+                document.getElementById('capturePhoto').classList.remove('hidden');
+            });
+        });
+
+        document.getElementById('capturePhoto').addEventListener('click', function () {
+            const video = document.getElementById('camera');
+            const canvas = document.getElementById('capturedCanvas');
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            capturedBase64 = canvas.toDataURL('image/png').split(',')[1];
+            video.srcObject.getTracks().forEach(track => track.stop());
+            document.getElementById('camera').classList.add('hidden');
+            document.getElementById('capturedCanvas').classList.remove('hidden');
+            document.getElementById('sendEndpoint2').classList.remove('hidden');
+        });
+
+        document.getElementById('sendEndpoint2').addEventListener('click', async function () {
+            try {
+                const response = await fetch('http://localhost:8080/TestNeuroWeb-1.0-SNAPSHOT/resources/javaee8/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ referenceSubject: uploadedBase64, candidateSubject: capturedBase64 })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                document.getElementById('matchResult').textContent = data.match || 'Error: No match data received';
+                document.getElementById('matchResult').classList.remove('hidden');
+                document.getElementById('resetButton').classList.remove('hidden');
+
+            } catch (error) {
+                console.error('Error en la solicitud:', error);
+                document.getElementById('matchResult').textContent = 'Error en la verificación';
+                document.getElementById('matchResult').classList.remove('hidden');
+                document.getElementById('resetButton').classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('resetButton').addEventListener('click', function () {
+            location.reload();
+        });
+
+    </script>
+</body>
+
+</html>
