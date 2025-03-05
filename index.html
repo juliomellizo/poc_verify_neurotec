@@ -167,7 +167,7 @@
 
         document.getElementById('sendEndpoint2').addEventListener('click', async function () {
             try {
-                const response = await fetch('http://localhost:8080/TestNeuroWeb-1.0-SNAPSHOT/resources/javaee8/verify', {
+                const response = await fetch('https://ps11xpwc-8080.use2.devtunnels.ms/TestNeuroWeb-1.0-SNAPSHOT/resources/javaee8/verify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ referenceSubject: uploadedBase64, candidateSubject: capturedBase64 })
